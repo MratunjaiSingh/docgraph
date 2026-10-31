@@ -31,7 +31,7 @@ flowchart LR
 
 ## Stack
 
-LangGraph, LangChain, Gemini embeddings (`gemini-embedding-001`), Groq (`openai/gpt-oss-120b`, `whisper-large-v3-turbo` for speech-to-text), `InMemoryVectorStore`, pypdf, Streamlit.
+LangGraph, LangChain, Gemini embeddings (`gemini-embedding-001`), Groq (`openai/gpt-oss-120b`, `whisper-large-v3` for speech-to-text), `InMemoryVectorStore`, pypdf, Streamlit.
 
 ## Design decisions
 

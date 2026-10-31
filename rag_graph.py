@@ -33,6 +33,11 @@ EMBED_WAIT = 65       # seconds to wait after a 429
 DEFAULT_K = 8
 RETRY_K = 12          # widened search if the first answer is "I dont know"
 HISTORY_TURNS = 6     # last N messages sent to the model
+APP_INFO = os.getenv(
+    "APP_INFO",
+    "DocGraph is a document question-answering assistant built with LangGraph, Gemini embeddings and Groq "
+    "by Mratunjai Singh. It answers only from the PDF the user uploads.",
+)
 MAX_PDF_MB = int(os.getenv("MAX_PDF_MB", "5"))      # protects API quota on a public deploy
 MAX_PAGES = int(os.getenv("MAX_PAGES", "30"))
 
@@ -207,6 +212,8 @@ Rules:
 - Facts about the document must come ONLY from the Context. Do not infer, assume, or exaggerate.
 - Use the Conversation only to understand follow-up questions or to answer questions about the conversation itself.
 - Copy names exactly as written in the Context.
+- If the question is about this assistant/app itself (what it is, who built it, how it works), answer ONLY from this App info: {APP_INFO}
+- Never assume that a person named in the Context built or owns this app.
 - {_LANG_RULE[lang]}
 - If the answer is not in the Context (or the Conversation), reply exactly: {_IDK[lang]}
 

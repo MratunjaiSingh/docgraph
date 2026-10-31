@@ -7,7 +7,12 @@ import streamlit as st
 import streamlit.components.v1 as components
 from groq import Groq
 
-STT_MODEL = os.getenv("STT_MODEL", "whisper-large-v3-turbo")   # more accurate: whisper-large-v3
+STT_MODEL = os.getenv("STT_MODEL", "whisper-large-v3")   # faster but less accurate: whisper-large-v3-turbo
+STT_PROMPT = os.getenv(
+    "STT_PROMPT",
+    "Hindi and English mixed (Hinglish). Common words: experience, skills, projects, tech stack, resume, "
+    "GitHub, LinkedIn, deploy, C++, Python.",
+)
 MAX_SPEAK_CHARS = 1500
 MIN_AUDIO_BYTES = 2000
 
@@ -29,6 +34,8 @@ def transcribe(audio_bytes: bytes, language: str | None = None) -> str:
     }
     if language:
         kwargs["language"] = language
+    if language != "en":
+        kwargs["prompt"] = STT_PROMPT    # hints spelling of English words inside Hindi speech
     result = _client.audio.transcriptions.create(**kwargs)
     text = result if isinstance(result, str) else getattr(result, "text", "")
     return text.strip()
