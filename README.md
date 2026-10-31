@@ -8,6 +8,7 @@ Chat with any PDF. Built as a LangGraph state graph with retrieval-grounded, str
 - **Streaming answers**, token by token
 - **Chat memory**: follow-up questions work ("what about the second one?"), and the model knows earlier questions
 - **Multiple chats**: "New chat" button, each chat bound to its own PDF
+- **Voice interface in Hindi and English**: ask by speaking (Groq Whisper speech-to-text) and listen to answers (browser text-to-speech). Answers can be generated in English or Hindi (Devanagari), or auto-matched to the language of the question; Hindi questions are translated to English for retrieval
 - **Grounded answers**: facts come only from retrieved context, otherwise "I dont know."
 - **Retry edge**: if the first answer is "I dont know", retrieval is widened (k=6 -> 10) and tried once more
 - **Rate-limit safe indexing**: batched embeddings with wait-and-retry on 429; index cached on disk per PDF (by content hash)
@@ -30,13 +31,14 @@ flowchart LR
 
 ## Stack
 
-LangGraph, LangChain, Gemini embeddings (`gemini-embedding-001`), Groq (`openai/gpt-oss-120b`), `InMemoryVectorStore`, pypdf, Streamlit.
+LangGraph, LangChain, Gemini embeddings (`gemini-embedding-001`), Groq (`openai/gpt-oss-120b`, `whisper-large-v3-turbo` for speech-to-text), `InMemoryVectorStore`, pypdf, Streamlit.
 
 ## Design decisions
 
 - **Chunking:** 800 chars / 100 overlap keeps sections of short documents separate.
 - **Index cache:** keyed by SHA-256 of the PDF bytes, so the same file is never embedded twice.
 - **Memory:** only the last 6 messages are sent to the model, so the prompt stays small.
+- **Voice:** speech-to-text runs on Groq; text-to-speech uses the browser's built-in voices (free, no quota), so the voice depends on the OS/browser and needs a click to play.
 - **Scope:** scanned/image-only PDFs are not supported (no OCR).
 
 ## Setup
@@ -46,7 +48,7 @@ pip install -r requirements.txt
 cp .env.example .env     # add GOOGLE_API_KEY and GROQ_API_KEY
 ```
 
-Optional: set `LLM_MODEL` in `.env` to change the Groq model.
+Optional: set `LLM_MODEL` / `STT_MODEL` in `.env` to change the Groq chat / speech-to-text model.
 
 ## Run
 
@@ -62,6 +64,6 @@ python rag_graph.py path/to/file.pdf      # CLI
 
 ## Live demo
 
-https://docgraph-dyfyxblqx3nrtuf9utvzhd.streamlit.app/  (free hosting, may take ~30s to wake up)
+https://YOUR-APP-NAME.streamlit.app  (free hosting, may take ~30s to wake up)
 
 Limits on the public demo: PDFs up to 5 MB and 30 pages (configurable via `MAX_PDF_MB` and `MAX_PAGES`).

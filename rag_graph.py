@@ -2,6 +2,7 @@
 import hashlib
 import io
 import os
+import re
 import time
 from pathlib import Path
 from typing import Callable, Iterator, Optional
@@ -134,6 +135,21 @@ def get_store(doc_id: str) -> InMemoryVectorStore:
     return _STORES[doc_id]
 
 
+# ---------- language ----------
+_DEVANAGARI = re.compile(r"[\u0900-\u097F]")
+_IDK = {"en": "I dont know.", "hi": "\u092e\u0941\u091d\u0947 \u0928\u0939\u0940\u0902 \u092a\u0924\u093e\u0964"}   # "मुझे नहीं पता।"
+_IDK_MARKERS = ("i dont know", "\u092e\u0941\u091d\u0947 \u0928\u0939\u0940\u0902 \u092a\u0924\u093e")
+_LANG_RULE = {
+    "en": "Reply in English.",
+    "hi": "Reply in Hindi, written in Devanagari script. Keep names, technical terms, code identifiers "
+          "and URLs exactly as they appear in the Context (do not translate or transliterate them).",
+}
+
+
+def _has_devanagari(text: str) -> bool:
+    return bool(_DEVANAGARI.search(text))
+
+
 # ---------- state ----------
 class RagState(BaseModel):
     question: str
@@ -144,6 +160,7 @@ class RagState(BaseModel):
     answer: str = ""
     k: int = DEFAULT_K
     retried: bool = False
+    answer_lang: str = "en"          # "en" or "hi"
 
 
 def _format_history(history: list[dict]) -> str:
@@ -156,15 +173,15 @@ def _format_history(history: list[dict]) -> str:
 
 # ---------- nodes ----------
 def condense_node(state: RagState) -> dict:
-    """Rewrite follow-up questions into standalone ones so retrieval works."""
-    if not state.history:
+    """Rewrite follow-ups into standalone English questions so retrieval works."""
+    if not state.history and not _has_devanagari(state.question):
         return {"standalone": state.question}
-    prompt = f"""Given the conversation and a follow-up question, rewrite the follow-up as a
-standalone question that makes sense without the conversation. If it is already standalone,
-return it unchanged. Return ONLY the question.
+    prompt = f"""Rewrite the follow-up question below as a standalone question in English that makes sense
+without the conversation (translate it to English if it is written in another language).
+If it is already a standalone English question, return it unchanged. Return ONLY the question.
 
 Conversation:
-{_format_history(state.history)}
+{_format_history(state.history) or "(none)"}
 
 Follow-up question: {state.question}"""
     out = str(llm.invoke(prompt).content).strip()
@@ -183,14 +200,15 @@ def create_context_node(state: RagState) -> dict:
 
 def generate_node(state: RagState) -> dict:
     history_block = _format_history(state.history) or "(none)"
+    lang = state.answer_lang if state.answer_lang in _LANG_RULE else "en"
     prompt = f"""
 You are an assistant answering questions about a document.
 Rules:
 - Facts about the document must come ONLY from the Context. Do not infer, assume, or exaggerate.
 - Use the Conversation only to understand follow-up questions or to answer questions about the conversation itself.
 - Copy names exactly as written in the Context.
-- Reply in English.
-- If the answer is not in the Context (or the Conversation), reply exactly: I dont know.
+- {_LANG_RULE[lang]}
+- If the answer is not in the Context (or the Conversation), reply exactly: {_IDK[lang]}
 
 Conversation:
 {history_block}
@@ -210,7 +228,8 @@ def widen_search_node(state: RagState) -> dict:
 
 # ---------- conditional edge ----------
 def route_after_generate(state: RagState) -> str:
-    said_idk = "i dont know" in state.answer.lower().replace("'", "").replace("\u2019", "")
+    answer = state.answer.lower().replace("'", "").replace("\u2019", "")
+    said_idk = any(marker in answer for marker in _IDK_MARKERS)
     if said_idk and not state.retried:
         return "widen_search_node"
     return END
@@ -235,12 +254,15 @@ app = graph.compile()
 
 
 # ---------- public API ----------
-def stream_answer(question: str, history: list[dict], doc_id: str) -> Iterator[dict]:
-    """Yield {"type": "token", "text": str} as the answer streams.
+def stream_answer(question: str, history: list[dict], doc_id: str, answer_lang: str = "auto") -> Iterator[dict]:
+    """answer_lang: "auto" (match the question), "en" or "hi".
+    Yield {"type": "token", "text": str} as the answer streams.
     Yields {"type": "reset"} if the retry edge fires and the answer restarts."""
+    if answer_lang == "auto":      # match the language the question was asked in
+        answer_lang = "hi" if _has_devanagari(question) else "en"
     last_step = None
     for chunk, meta in app.stream(
-        {"question": question, "history": history},
+        {"question": question, "history": history, "answer_lang": answer_lang},
         config={"configurable": {"doc_id": doc_id}},
         stream_mode="messages",
     ):

@@ -3,8 +3,12 @@ import uuid
 import streamlit as st
 
 from rag_graph import index_pdf, stream_answer
+from voice import speak_button, transcribe
 
 st.set_page_config(page_title="DocGraph", page_icon="📄", layout="wide")
+
+VOICE_LANGS = {"Auto-detect": None, "English": "en", "Hindi": "hi"}          # speech-to-text
+ANSWER_LANGS = {"Auto (match question)": "auto", "English": "en", "Hindi": "hi"}   # answer text + listen
 
 
 # ---------- state helpers ----------
@@ -29,6 +33,7 @@ def delete_chat(cid: str):
 if "chats" not in st.session_state:
     st.session_state.chats = {}      # chat_id -> {title, doc_id, doc_name, messages}
     st.session_state.docs = {}       # doc_id -> file name (PDFs already indexed this session)
+    st.session_state.mic_n = 0       # bump to reset the recorder after each use
     new_chat()
 
 active = st.session_state.active
@@ -44,6 +49,8 @@ with st.sidebar:
         st.button(label, key=f"chat_{cid}", on_click=select_chat, args=(cid,), use_container_width=True)
     st.divider()
     st.button("🗑 Delete this chat", on_click=delete_chat, args=(active,), use_container_width=True)
+    st.selectbox("🎤 I speak in", list(VOICE_LANGS), key="voice_lang")
+    st.selectbox("🔊 Answer in", list(ANSWER_LANGS), key="answer_lang")
     st.caption("LangGraph + Gemini embeddings + Groq (GPT-OSS 120B)")
 
 # ---------- pick a PDF for this chat ----------
@@ -97,8 +104,28 @@ st.caption(f"📎 {chat['doc_name']}")
 for m in chat["messages"]:
     with st.chat_message(m["role"]):
         st.markdown(m["content"])
+        if m["role"] == "assistant":
+            speak_button(m["content"])
 
-if question := st.chat_input("Ask about the document..."):
+with st.expander("🎤 Ask by voice"):
+    audio = st.audio_input("Record your question", key=f"mic_{active}_{st.session_state.mic_n}")
+
+question = st.chat_input("Ask about the document...")
+
+if audio is not None and not question:
+    with st.spinner("Transcribing..."):
+        try:
+            question = transcribe(audio.getvalue(), VOICE_LANGS[st.session_state.voice_lang])
+        except Exception as e:
+            question = None
+            st.error(f"Could not transcribe audio: {e}")
+        else:
+            if not question:
+                st.warning("Could not hear anything, please try again.")
+                question = None
+    st.session_state.mic_n += 1     # recorder resets on the next run
+
+if question:
     history = list(chat["messages"])          # previous turns, sent to the graph as memory
     with st.chat_message("user"):
         st.markdown(question)
@@ -107,7 +134,7 @@ if question := st.chat_input("Ask about the document..."):
         box = st.empty()
         text, failed = "", None
         try:
-            for ev in stream_answer(question, history, chat["doc_id"]):
+            for ev in stream_answer(question, history, chat["doc_id"], ANSWER_LANGS[st.session_state.answer_lang]):
                 if ev["type"] == "reset":
                     text = ""
                     box.markdown("🔍 *Searching deeper...*")
