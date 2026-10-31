@@ -62,6 +62,6 @@ python rag_graph.py path/to/file.pdf      # CLI
 
 ## Live demo
 
-https://YOUR-APP-NAME.streamlit.app  (free hosting, may take ~30s to wake up)
+https://docgraph-dyfyxblqx3nrtuf9utvzhd.streamlit.app/  (free hosting, may take ~30s to wake up)
 
 Limits on the public demo: PDFs up to 5 MB and 30 pages (configurable via `MAX_PDF_MB` and `MAX_PAGES`).
