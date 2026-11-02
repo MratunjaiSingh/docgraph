@@ -10,7 +10,7 @@ Chat with any PDF. Built as a LangGraph state graph with retrieval-grounded, str
 - **Multiple chats**: "New chat" button, each chat bound to its own PDF
 - **Voice interface in Hindi and English**: ask by speaking (Groq Whisper speech-to-text) and listen to answers (browser text-to-speech). Answers can be generated in English or Hindi (Devanagari), or auto-matched to the language of the question; Hindi questions are translated to English for retrieval
 - **Grounded answers**: facts come only from retrieved context, otherwise "I dont know."
-- **Retry edge**: if the first answer is "I dont know", retrieval is widened (k=6 -> 10) and tried once more
+- **Retry edge**: if the first answer is "I dont know" and the document has more chunks than were retrieved, retrieval is widened and tried once more (skipped when everything was already retrieved)
 - **Rate-limit safe indexing**: batched embeddings with wait-and-retry on 429; index cached on disk per PDF (by content hash)
 
 ## Flow
@@ -64,6 +64,6 @@ python rag_graph.py path/to/file.pdf      # CLI
 
 ## Live demo
 
-https://YOUR-APP-NAME.streamlit.app  (free hosting, may take ~30s to wake up)
+https://docgraph-dyfyxblqx3nrtuf9utvzhd.streamlit.app/  (free hosting, may take ~30s to wake up)
 
 Limits on the public demo: PDFs up to 5 MB and 30 pages (configurable via `MAX_PDF_MB` and `MAX_PAGES`).

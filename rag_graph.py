@@ -25,6 +25,7 @@ INDEX_DIR = Path("indexes")
 INDEX_VERSION = "2"   # bump when chunking/extraction changes, so old caches are ignored
 EMBED_MODEL = "models/gemini-embedding-001"
 LLM_MODEL = os.getenv("LLM_MODEL", "openai/gpt-oss-120b")
+LLM_REASONING_EFFORT = os.getenv("LLM_REASONING_EFFORT", "low")   # gpt-oss only: low | medium | high
 
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 100
@@ -42,7 +43,8 @@ MAX_PDF_MB = int(os.getenv("MAX_PDF_MB", "5"))      # protects API quota on a pu
 MAX_PAGES = int(os.getenv("MAX_PAGES", "30"))
 
 embeddings = GoogleGenerativeAIEmbeddings(model=EMBED_MODEL)
-llm = ChatGroq(model=LLM_MODEL, temperature=0)
+_llm_kwargs = {"reasoning_effort": LLM_REASONING_EFFORT} if "gpt-oss" in LLM_MODEL else {}
+llm = ChatGroq(model=LLM_MODEL, temperature=0, **_llm_kwargs)
 
 _STORES: dict[str, InMemoryVectorStore] = {}   # doc_id -> store (in-memory cache)
 
@@ -166,6 +168,7 @@ class RagState(BaseModel):
     k: int = DEFAULT_K
     retried: bool = False
     answer_lang: str = "en"          # "en" or "hi"
+    n_chunks: int = 0                # total chunks in the document
 
 
 def _format_history(history: list[dict]) -> str:
@@ -196,7 +199,7 @@ Follow-up question: {state.question}"""
 def retrieve_node(state: RagState, config: RunnableConfig) -> dict:
     store = get_store(config["configurable"]["doc_id"])
     docs = store.similarity_search(query=state.standalone or state.question, k=state.k)
-    return {"documents": docs}
+    return {"documents": docs, "n_chunks": len(store.store)}
 
 
 def create_context_node(state: RagState) -> dict:
@@ -237,7 +240,8 @@ def widen_search_node(state: RagState) -> dict:
 def route_after_generate(state: RagState) -> str:
     answer = state.answer.lower().replace("'", "").replace("\u2019", "")
     said_idk = any(marker in answer for marker in _IDK_MARKERS)
-    if said_idk and not state.retried:
+    can_widen = len(state.documents) < state.n_chunks      # nothing new to fetch if everything was already retrieved
+    if said_idk and not state.retried and can_widen:
         return "widen_search_node"
     return END
 
